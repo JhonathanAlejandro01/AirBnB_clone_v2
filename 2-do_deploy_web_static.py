@@ -1,69 +1,45 @@
 #!/usr/bin/python3
-""" distributes an archive to your web servers, using the
-function do_deploy
-"""
-from datetime import datetime
+"""Fabric script that generates a .tgz archive from the contents of the
+ web_static folder of your AirBnB Clone repo, using the function do_pack."""
+
 from fabric.api import *
+from datetime import datetime
 import os
 
-env.hosts = ['34.75.208.96', '3.90.199.217']
+env.hosts = ['34.74.27.162', '54.224.88.154']
 
 
 def do_pack():
-    '''
-        Creating an archive with the file in web_static folder
-    '''
-    now = datetime.now()
-    filename = "versions/web_static_{}{}{}{}{}{}.tgz".format(now.year,
-                                                             now.month,
-                                                             now.day,
-                                                             now.hour,
-                                                             now.minute,
-                                                             now.second)
-    print("Packing web_static to versions/{}".format(filename))
-    local("mkdir -p versions")
-    result = local("tar -vczf {} web_static".format(filename))
-    if result.succeeded:
-        return (filename)
-    else:
+    try:
+        formato = "%Y%m%dT%H%M%S"
+        date_now = datetime.now()
+        created_at = date_now.created_at.strftime(formato)
+        local("mkdir -p /versions")
+        file_tgz = "web_static_{}.tgz".format(created_at)
+        local("tar -cvzf versions/{}.tgz web_static".format(file_tgz))
+        return file_tgz
+    except:
         return None
 
 
 def do_deploy(archive_path):
-    '''
-        Deploys an archive to the web servers
-    '''
-    name = archive_path.split("/")[1]
-    if not os.path.exists(archive_path):
+    if os.path.isfile(archive_path) is False:
         return False
-
-    result = put(archive_path, "/tmp/")
-    if result.failed:
+    try:
+        put(archive_path, "/tmp")
+        id_file = archive_path.split("_")
+        id_final = id_file[2][:-4]
+        folder = "/data/web_static/releases/"
+        run("mkdir -p {}web_static_{}/".format(folder, id_final))
+        run("tar -xzf /tmp/web_static_{}.tgz -C {}web_static_{}/"
+            .format(id_final, folder, id_final))
+        run("rm /tmp/web_static_{}.tgz".format(id_final))
+        run("mv {}web_static_{}/web_static/* {}web_static_{}/"
+            .format(folder, id_final, folder, id_final))
+        run("rm -rf {}web_static_{}/web_static".format(folder, id_final))
+        run("rm -rf /data/web_static/current")
+        run("ln -s {}web_static_{}/ /data/web_static/current"
+            .format(folder, id_final))
+        return True
+    except:
         return False
-
-    run("mkdir -p /data/web_static/releases/{}".format(name[:-4]))
-
-    cmd = "tar -xzf /tmp/{} -C /data/web_static/releases/{}".format(name,
-                                                                    name[:-4])
-    result = run(cmd)
-    if result.failed:
-        return False
-
-    result = run("rm /tmp/{}".format(name))
-    if result.failed:
-        return False
-
-    run("cp -rp /data/web_static/releases/{}/web_static/*\
-        /data/web_static/releases/{}/".format(name[:-4], name[:-4]))
-
-    run("rm -rf /data/web_static/releases/{}/web_static/".format(name[:-4]))
-    result = run("rm /data/web_static/current")
-    if result.failed:
-        return False
-
-    path = "/data/web_static/releases/{}".format(name[:-4])
-    cmd = "ln -sf {} /data/web_static/current".format(path)
-    result = run(cmd)
-    if result.failed:
-        return False
-    return True
